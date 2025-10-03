@@ -18,13 +18,10 @@ on:
       deploy_user:
         required: true
         type: string
-      ssh_secret_name:
-        required: true
-        type: string
     secrets:
       DOCKERHUB_USERNAME: {}
       DOCKERHUB_TOKEN: {}
-      # caller passes the SSH_PRIVATE_KEY_* as secret via `with:`
+      SSH_PRIVATE_KEY: {}
 jobs:
   build_and_push:
     runs-on: ubuntu-latest
@@ -61,14 +58,14 @@ jobs:
       - name: Prepare SSH key
         id: prepare_key
         run: |
-          echo "${{ secrets[ inputs.ssh_secret_name ] }}" > /tmp/deploy_key
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
       - name: Remote deploy via SSH
         uses: appleboy/ssh-action@v0.1.11
         with:
           host: ${{ inputs.deploy_host }}
           username: ${{ inputs.deploy_user }}
-          key: ${{ secrets[ inputs.ssh_secret_name ] }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             # ensure deploy script exists
             /usr/local/bin/deploy_service.sh "${{ inputs.service }}" "${{ inputs.env }}" "${{ needs.build_and_push.outputs.image_tag }}"
