@@ -61,7 +61,7 @@ jobs:
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
       - name: Remote deploy via SSH
-        uses: appleboy/ssh-action@v0.1.11
+        uses: appleboy/ssh-action@v1.2.1
         with:
           host: ${{ inputs.deploy_host }}
           username: ${{ inputs.deploy_user }}
