@@ -3,25 +3,12 @@ name: Reusable Build & Deploy
 on:
   workflow_call:
     inputs:
-      service:
-        required: true
-        type: string
       image_name:
-        required: true
-        type: string
-      env:
-        required: true
-        type: string
-      deploy_host:
-        required: true
-        type: string
-      deploy_user:
         required: true
         type: string
     secrets:
       DOCKERHUB_USERNAME: {}
       DOCKERHUB_TOKEN: {}
-      SSH_PRIVATE_KEY: {}
 jobs:
   build_and_push:
     runs-on: ubuntu-latest
@@ -50,22 +37,3 @@ jobs:
           context: .
           push: true
           tags: ${{ steps.set_tag.outputs.image_tag }}
-
-  deploy:
-    needs: build_and_push
-    runs-on: ubuntu-latest
-    steps:
-      - name: Prepare SSH key
-        id: prepare_key
-        run: |
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > /tmp/deploy_key
-          chmod 600 /tmp/deploy_key
-      - name: Remote deploy via SSH
-        uses: appleboy/ssh-action@v1.2.1
-        with:
-          host: ${{ inputs.deploy_host }}
-          username: ${{ inputs.deploy_user }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            # ensure deploy script exists
-            /usr/local/bin/deploy_service.sh "${{ inputs.service }}" "${{ inputs.env }}" "${{ needs.build_and_push.outputs.image_tag }}"
