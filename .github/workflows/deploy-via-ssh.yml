@@ -3,7 +3,7 @@ name: Reusable SSH Deploy
 on:
     workflow_call:
         inputs:
-            deploy_path:
+            service_name:
                 required: true
                 type: string
 
@@ -22,5 +22,30 @@ jobs:
                   ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
 
             - name: Deploy via SSH
+              env:
+                  SERVICE_NAME: ${{ inputs.service_name }}
               run: |
-                  rsync -avz --delete ./ ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ inputs.deploy_path }}
+                  TIMESTAMP=$(date +"%Y%m%d%H%M%S")
+
+                  ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "
+                    mkdir -p /srv/$SERVICE_NAME/releases/$TIMESTAMP
+                    mkdir -p /srv/$SERVICE_NAME/shared
+                  "
+
+                  rsync -avz --delete ./ \
+                    ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/srv/$SERVICE_NAME/releases/$TIMESTAMP/
+
+                  ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "
+                    ln -sfn /srv/$SERVICE_NAME/releases/$TIMESTAMP /srv/$SERVICE_NAME/current
+                  "
+
+            - name: Restart service (if systemd exists)
+              if: ${{ inputs.service_name != 'nginx' }} # optional, avoid restarting nginx if not managed by systemd
+              env:
+                  SERVICE_NAME: ${{ inputs.service_name }}
+              run: |
+                  ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "
+                    if systemctl list-unit-files | grep -q my-$SERVICE_NAME.service; then
+                      sudo systemctl restart my-$SERVICE_NAME.service
+                    fi
+                  "
