@@ -21,8 +21,7 @@ jobs:
       - name: Set image tag
         id: set_tag
         run: |
-          SHORT_SHA=$(git rev-parse --short=8 HEAD)
-          IMAGE_TAG=${{ inputs.image_name }}:commit-${SHORT_SHA}
+          IMAGE_TAG=${{ inputs.image_name }}:latest
           echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
 
       - name: Log in to Docker Hub
