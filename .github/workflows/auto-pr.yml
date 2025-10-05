@@ -1,0 +1,65 @@
+name: Auto Create Promotion PR
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - staging
+      - uat
+    types:
+      - closed
+
+jobs:
+  create-pr:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write       # needed to push and create PRs
+      pull-requests: write  # needed to open PRs
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set target branch
+        id: set_target
+        run: |
+          SOURCE_BRANCH=${{ github.base_ref }}
+          case "$SOURCE_BRANCH" in
+            develop) TARGET_BRANCH="staging" ;;
+            staging) TARGET_BRANCH="uat" ;;
+            uat) TARGET_BRANCH="main" ;;
+            *) TARGET_BRANCH="" ;;
+          esac
+
+          echo "target=$TARGET_BRANCH" >> $GITHUB_OUTPUT
+
+      - name: Skip if no target branch
+        if: steps.set_target.outputs.target == ''
+        run: echo "No target branch for ${GITHUB_BASE_REF}, skipping."
+
+      - name: Create promotion PR
+        if: steps.set_target.outputs.target != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TARGET=${{ steps.set_target.outputs.target }}
+          SOURCE=${{ github.base_ref }}
+
+          echo "Creating PR: $SOURCE → $TARGET"
+
+          # Update target branch
+          git fetch origin $TARGET
+          git checkout $TARGET
+          git pull origin $TARGET
+
+          # Create PR if not exists
+          gh pr create \
+            --base "$TARGET" \
+            --head "$SOURCE" \
+            --title "Promote $SOURCE → $TARGET" \
+            --body "Automatic promotion from $SOURCE to $TARGET." \
+            || echo "PR already exists or failed (might already be open)."
