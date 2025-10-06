@@ -1,50 +1,59 @@
-name: Reusable Auto Promotion PR
+name: Auto Create Pull Request
 
 on:
   workflow_call:
+    secrets:
+      GH_PAT:
+        required: false
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
   create-pr:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-
+    if: github.event.pull_request.merged == true
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Set target branch
-        id: set_target
+      - name: Determine target branch
+        id: branch
         run: |
-          SOURCE_BRANCH=${{ github.base_ref || github.ref_name }}
-          case "$SOURCE_BRANCH" in
-            develop) TARGET_BRANCH="staging" ;;
-            staging) TARGET_BRANCH="uat" ;;
-            uat) TARGET_BRANCH="main" ;;
-            *) TARGET_BRANCH="" ;;
+          case "${GITHUB_REF_NAME}" in
+            develop) echo "target=staging" >> $GITHUB_OUTPUT ;;
+            staging) echo "target=uat" >> $GITHUB_OUTPUT ;;
+            uat) echo "target=main" >> $GITHUB_OUTPUT ;;
+            *) echo "No matching branch for ${GITHUB_REF_NAME}. Exiting."; exit 0 ;;
           esac
-          echo "target=$TARGET_BRANCH" >> $GITHUB_OUTPUT
 
-      - name: Skip if no target branch
-        if: steps.set_target.outputs.target == ''
-        run: echo "No target branch for this merge. Skipping."
-
-      - name: Create PR
-        if: steps.set_target.outputs.target != ''
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Authenticate with GitHub
         run: |
-          TARGET=${{ steps.set_target.outputs.target }}
-          SOURCE=${{ github.base_ref || github.ref_name }}
+          echo "🔐 Authenticating with GitHub..."
+          TOKEN="${{ secrets.GH_PAT || github.token }}"
+          echo "$TOKEN" | gh auth login --with-token
+          gh auth status
 
-          echo "Creating PR from $SOURCE → $TARGET"
+      - name: Create Pull Request
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT || github.token }}
+          SRC: ${{ github.ref_name }}
+          TARGET: ${{ steps.branch.outputs.target }}
+        run: |
+          set -e
+          echo "Creating PR from $SRC → $TARGET"
 
-          gh pr create \
-            --base "$TARGET" \
-            --head "$SOURCE" \
-            --title "Promote $SOURCE → $TARGET" \
-            --body "Automatic promotion from $SOURCE to $TARGET." \
-            || echo "PR already exists or failed (might already be open)."
+          if [ -z "$TARGET" ]; then
+            echo "⚠️ No target branch — nothing to do."
+            exit 0
+          fi
+
+          # Try to create PR
+          if ! gh pr create --base "$TARGET" --head "$SRC" \
+            --title "Auto PR: $SRC → $TARGET" \
+            --body "Automatically created when $SRC was merged."; then
+            echo "⚠️ PR already exists or creation failed."
+            exit 1
+          fi
+
+          echo "✅ Pull Request created successfully!"
